@@ -59,6 +59,12 @@
     </div>
 
     <div class="section">
+      <label>Test notification:</label>
+      <button onclick="sendTestNotification()">🔔 Send test notification</button>
+      <span id="test-status"></span>
+    </div>
+
+    <div class="section">
       <button class="danger" onclick="unregister()">Unregister</button>
     </div>
   </div>
@@ -95,6 +101,7 @@
 
       try {
         const permission = await Notification.requestPermission();
+        console.log('Notification permission:', permission);
         if (permission !== 'granted') {
           const isSecure = window.isSecureContext;
           const hint = isSecure ? '' : ' (Note: Web Push requires HTTPS or localhost)';
@@ -103,30 +110,47 @@
           return;
         }
 
+        console.log('Registering service worker...');
         const reg = await navigator.serviceWorker.register('/sw.js');
         await navigator.serviceWorker.ready;
+        console.log('Service worker registered');
 
+        console.log('Fetching VAPID public key...');
         const response = await fetch('/api/vapid-public-key');
         const { publicKey } = await response.json();
+        console.log('VAPID key received:', publicKey ? publicKey.substring(0, 20) + '...' : 'EMPTY');
+        
+        if (!publicKey || publicKey.length < 80) {
+          throw new Error('Invalid VAPID public key from server. Check Azure environment variables.');
+        }
 
+        console.log('Subscribing to push notifications...');
         const subscription = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         });
+        console.log('Push subscription successful');
 
+        console.log('Sending subscription to server...');
         const res = await fetch('/api/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(subscription),
         });
 
-        if (!res.ok) throw new Error('Subscribe failed');
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('Subscribe API failed:', res.status, errorText);
+          throw new Error(`Subscribe failed: ${res.status}`);
+        }
 
         const data = await res.json();
+        console.log('Registration complete, ID:', data.id);
         userId = data.id;
         localStorage.setItem(STORAGE_KEY, userId);
         updateUI();
       } catch (err) {
+        console.error('Registration error:', err);
         const isSecure = window.isSecureContext;
         const securityHint = !isSecure ? ' Web Push requires HTTPS or localhost.' : '';
         showStatus('register-status', `Error: ${err.message}.${securityHint}`, 'error');
@@ -154,6 +178,32 @@
         updateUI();
       } catch (err) {
         showStatus('register-status', `Error: ${err.message}`, 'error');
+      }
+    }
+
+    async function sendTestNotification() {
+      try {
+        const res = await fetch('/', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${userId}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: '🎉 Test notification from Notify Me!',
+            url: window.location.origin,
+          }),
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || 'Failed to send notification');
+        }
+
+        document.getElementById('test-status').innerHTML = '<span style="color: #27ae60;">✓ Sent!</span>';
+        setTimeout(() => document.getElementById('test-status').textContent = '', 3000);
+      } catch (err) {
+        document.getElementById('test-status').innerHTML = `<span style="color: #c0392b;">✗ ${err.message}</span>`;
       }
     }
 

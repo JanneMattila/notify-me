@@ -118,10 +118,19 @@ const server = http.createServer(async (req, res) => {
         keys: { p256dh: user.p256dh, auth: user.auth },
       };
 
+      console.log(`Sending push notification to user ${token}`);
       try {
         await push.sendNotification(subscription, payload);
+        console.log(`Push notification sent successfully to user ${token}`);
       } catch (err) {
-        console.error('Push notification failed:', err.message);
+        console.error(`Push notification failed for user ${token}:`, err.message);
+        console.error('Error details:', err.statusCode, err.body);
+        
+        // If subscription is invalid/expired (410 Gone, or ENOTFOUND), clean up
+        if (err.statusCode === 410 || err.message.includes('ENOTFOUND') || err.message.includes('permanently-removed')) {
+          console.log(`Removing invalid subscription for user ${token}`);
+          db.deleteUser(token);
+        }
       }
 
       return sendJson(res, 200, { status: 'ok' });
