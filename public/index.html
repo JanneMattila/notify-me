@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notify Me</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.6; }
+    h1 { margin-bottom: 24px; }
+    .section { margin-bottom: 32px; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; border: 1px solid #333; border-radius: 4px; background: #333; color: #fff; margin-right: 8px; }
+    button:hover { background: #555; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    button.danger { background: #c0392b; border-color: #c0392b; }
+    button.danger:hover { background: #e74c3c; }
+    button.copy { background: #2980b9; border-color: #2980b9; }
+    button.copy:hover { background: #3498db; }
+    .guid { font-family: monospace; font-size: 18px; background: #f4f4f4; padding: 8px 12px; border-radius: 4px; display: inline-block; margin: 8px 0; }
+    pre { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 4px; overflow-x: auto; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+    .status { padding: 8px 12px; border-radius: 4px; margin-top: 8px; }
+    .status.info { background: #d5e8f0; color: #1a5276; }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error { background: #f8d7da; color: #721c24; }
+    .hidden { display: none; }
+    label { display: block; margin-bottom: 4px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>🔔 Notify Me</h1>
+
+  <div id="not-supported" class="section hidden">
+    <div class="status error">Push notifications are not supported in this browser.</div>
+  </div>
+
+  <div id="register-section" class="section">
+    <button id="register-btn" onclick="register()">Register for notifications</button>
+    <div id="register-status"></div>
+  </div>
+
+  <div id="registered-section" class="section hidden">
+    <div>
+      <label>Your ID:</label>
+      <span class="guid" id="user-guid"></span>
+    </div>
+
+    <div class="section">
+      <label>Send a notification with curl:</label>
+      <pre id="curl-example"></pre>
+      <button class="copy" onclick="copyCurl()">📋 Copy curl command</button>
+      <span id="copy-status"></span>
+    </div>
+
+    <div class="section">
+      <label>Send with a URL:</label>
+      <pre id="curl-url-example"></pre>
+      <button class="copy" onclick="copyCurlUrl()">📋 Copy curl command</button>
+      <span id="copy-url-status"></span>
+    </div>
+
+    <div class="section">
+      <button class="danger" onclick="unregister()">Unregister</button>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'notify-me-id';
+    let userId = localStorage.getItem(STORAGE_KEY);
+
+    function showStatus(elementId, message, type) {
+      const el = document.getElementById(elementId);
+      el.innerHTML = `<div class="status ${type}">${message}</div>`;
+    }
+
+    function updateUI() {
+      if (userId) {
+        document.getElementById('register-section').classList.add('hidden');
+        document.getElementById('registered-section').classList.remove('hidden');
+        document.getElementById('user-guid').textContent = userId;
+
+        const baseUrl = window.location.origin;
+        document.getElementById('curl-example').textContent =
+          `curl -X POST ${baseUrl}/ \\\n  -H "Authorization: Bearer ${userId}" \\\n  -H "Content-Type: text/plain" \\\n  -d "Hello from curl!"`;
+        document.getElementById('curl-url-example').textContent =
+          `curl -X POST ${baseUrl}/ \\\n  -H "Authorization: Bearer ${userId}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"text": "Check this out", "url": "https://example.com"}'`;
+      } else {
+        document.getElementById('register-section').classList.remove('hidden');
+        document.getElementById('registered-section').classList.add('hidden');
+      }
+    }
+
+    async function register() {
+      const btn = document.getElementById('register-btn');
+      btn.disabled = true;
+
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          const isSecure = window.isSecureContext;
+          const hint = isSecure ? '' : ' (Note: Web Push requires HTTPS or localhost)';
+          showStatus('register-status', `Notification permission denied.${hint}`, 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+
+        const response = await fetch('/api/vapid-public-key');
+        const { publicKey } = await response.json();
+
+        const subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+
+        const res = await fetch('/api/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(subscription),
+        });
+
+        if (!res.ok) throw new Error('Subscribe failed');
+
+        const data = await res.json();
+        userId = data.id;
+        localStorage.setItem(STORAGE_KEY, userId);
+        updateUI();
+      } catch (err) {
+        const isSecure = window.isSecureContext;
+        const securityHint = !isSecure ? ' Web Push requires HTTPS or localhost.' : '';
+        showStatus('register-status', `Error: ${err.message}.${securityHint}`, 'error');
+        btn.disabled = false;
+      }
+    }
+
+    async function unregister() {
+      try {
+        await fetch('/api/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: userId }),
+        });
+
+        const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+        if (reg) {
+          const subscription = await reg.pushManager.getSubscription();
+          if (subscription) await subscription.unsubscribe();
+          await reg.unregister();
+        }
+
+        localStorage.removeItem(STORAGE_KEY);
+        userId = null;
+        updateUI();
+      } catch (err) {
+        showStatus('register-status', `Error: ${err.message}`, 'error');
+      }
+    }
+
+    function copyCurl() {
+      const text = document.getElementById('curl-example').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        document.getElementById('copy-status').textContent = '✓ Copied!';
+        setTimeout(() => document.getElementById('copy-status').textContent = '', 2000);
+      });
+    }
+
+    function copyCurlUrl() {
+      const text = document.getElementById('curl-url-example').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        document.getElementById('copy-url-status').textContent = '✓ Copied!';
+        setTimeout(() => document.getElementById('copy-url-status').textContent = '', 2000);
+      });
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i++) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    // Init
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      document.getElementById('not-supported').classList.remove('hidden');
+      document.getElementById('register-section').classList.add('hidden');
+    } else {
+      updateUI();
+    }
+  </script>
+</body>
+</html>

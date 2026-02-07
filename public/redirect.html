@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notify Me - Redirect</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 640px; margin: 60px auto; padding: 0 20px; color: #222; line-height: 1.6; text-align: center; }
+    h1 { margin-bottom: 24px; }
+    .message { font-size: 18px; margin-bottom: 24px; background: #f4f4f4; padding: 16px; border-radius: 4px; }
+    a.link { display: inline-block; padding: 12px 24px; font-size: 16px; background: #2980b9; color: #fff; text-decoration: none; border-radius: 4px; }
+    a.link:hover { background: #3498db; }
+  </style>
+</head>
+<body>
+  <h1>🔔 Notify Me</h1>
+  <div class="message" id="message-text"></div>
+  <a class="link" id="target-link" href="#">Open Link</a>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const text = params.get('text') || 'No message';
+    const url = params.get('url') || '/';
+
+    document.getElementById('message-text').textContent = text;
+    const link = document.getElementById('target-link');
+    link.href = url;
+    link.textContent = url === '/' ? 'Go to home' : `Open: ${url}`;
+  </script>
+</body>
+</html>

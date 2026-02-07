@@ -1,0 +1,26 @@
+{
+  "name": "notify-me",
+  "version": "1.0.0",
+  "description": "Notify me web application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JanneMattila/notify-me.git"
+  },
+  "keywords": [],
+  "author": "Janne Mattila",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/JanneMattila/notify-me/issues"
+  },
+  "homepage": "https://github.com/JanneMattila/notify-me#readme",
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "dotenv": "^17.2.4",
+    "web-push": "^3.6.7"
+  }
+}
