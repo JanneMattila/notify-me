@@ -155,8 +155,16 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Invalid push subscription' });
       }
 
+      console.log('Registering subscription with endpoint:', subscription.endpoint);
+      
+      if (subscription.endpoint.includes('permanently-removed.invalid')) {
+        console.error('Browser returned invalid endpoint - VAPID key mismatch or browser cache issue');
+        return sendJson(res, 400, { error: 'Invalid subscription endpoint. Check VAPID keys or clear browser data.' });
+      }
+
       const id = crypto.randomUUID();
       db.addUser(id, subscription);
+      console.log('User registered with ID:', id);
       return sendJson(res, 201, { id });
     }
 

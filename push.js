@@ -10,6 +10,11 @@ if (!publicKey || !privateKey || !subject) {
   process.exit(1);
 }
 
+console.log('VAPID configured:');
+console.log('- Public key:', publicKey.substring(0, 20) + '...');
+console.log('- Private key:', privateKey.substring(0, 20) + '...');
+console.log('- Subject:', subject);
+
 webpush.setVapidDetails(subject, publicKey, privateKey);
 
 module.exports = {
